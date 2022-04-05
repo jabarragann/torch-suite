@@ -1,0 +1,3 @@
+[submodule "pytorch-checkpoint"]
+	path = pytorch-checkpoint
+	url = https://github.com/jabarragann/pytorch-checkpoint.git
