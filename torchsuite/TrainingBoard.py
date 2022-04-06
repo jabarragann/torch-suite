@@ -3,8 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Custom
-from kincalib.Learning.Trainer import Trainer
-from kincalib.utils.Logger import Logger
+from torchsuite.Trainer import Trainer
+from torchsuite.utils.Logger import Logger
 from pytorchcheckpoint.checkpoint import CheckpointHandler
 
 log = Logger(__name__).log
