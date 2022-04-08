@@ -32,6 +32,7 @@ class Trainer(ABC):
     gpu_boole: bool = True
     optimize_hyperparams: bool = False
     save: bool = True
+    log_interval: int = 1
 
     def __post_init__(self):
         self.init_epoch = 0
@@ -49,7 +50,9 @@ class Trainer(ABC):
             total = 0
 
             # Batch loop
-            for i, (x, y) in enumerate(self.train_loader):
+            local_loss_sum = 0
+            local_total = 0
+            for batch_idx, (x, y) in enumerate(self.train_loader):
                 if self.gpu_boole:
                     x = x.cuda()
                     y = y.cuda()
@@ -61,22 +64,41 @@ class Trainer(ABC):
                 loss.backward()
                 self.optimizer.step()  # Update parameters
 
-                # End of batch stats
-                self.checkpoint_handler.store_running_var(
-                    var_name="train_loss_batch", iteration=self.batch_count, value=loss.cpu().data.item()
-                )
                 self.batch_count += 1
+                # Global loss
                 loss_sum += loss * y.shape[0]
                 total += y.shape[0]
+                # Local loss
+                local_loss_sum += loss * y.shape[0]
+                local_total += y.shape[0]
+
+                if batch_idx % self.log_interval == 0:
+                    local_loss = (local_loss_sum / local_total).cpu().item()
+                    # End of batch stats
+                    self.checkpoint_handler.store_running_var(
+                        var_name="train_loss_batch", iteration=self.batch_count, value=local_loss
+                    )
+                    if verbose:
+                        log.info(
+                            f"epoch {epoch:3d} batch_idx {batch_idx:4d}/{len(self.train_loader)-1} local_loss {local_loss:0.6f}"
+                        )
+
+                    local_loss_sum = 0
+                    local_total = 0
 
             # End of epoch statistics
             train_loss = loss_sum / total
             train_loss = train_loss.cpu().item()
-            train_acc = self.calculate_acc(self.train_loader)
-            valid_acc = self.calculate_acc(self.valid_loader)
-            self.checkpoint_handler.store_running_var(var_name="train_loss", iteration=epoch, value=train_loss)
-            self.checkpoint_handler.store_running_var(var_name="train_acc", iteration=epoch, value=train_acc)
-            self.checkpoint_handler.store_running_var(var_name="valid_acc", iteration=epoch, value=valid_acc)
+
+            # Todo: Add here a better way of calculating
+            # additional metrics. Allow the user to select
+            # which metrics to calculate at the end of epoch.
+            if epoch > 1:
+                train_acc = self.calculate_acc(self.train_loader)
+                valid_acc = self.calculate_acc(self.valid_loader)
+                self.checkpoint_handler.store_running_var(var_name="train_loss", iteration=epoch, value=train_loss)
+                self.checkpoint_handler.store_running_var(var_name="train_acc", iteration=epoch, value=train_acc)
+                self.checkpoint_handler.store_running_var(var_name="valid_acc", iteration=epoch, value=valid_acc)
             self.final_epoch = epoch
             self.init_epoch = self.final_epoch
 
@@ -91,11 +113,13 @@ class Trainer(ABC):
             # Print epoch information
             time2 = time.time()
             if verbose:
+                log.info(f"*" * 30)
                 log.info(f"Epoch {epoch}/{self.epochs-1}:")
                 log.info(f"Elapsed time for epoch: { time2 - time1:0.04f} s")
                 log.info(f"Training loss:     {train_loss:0.8f}")
-                log.info(f"Training accuracy: {train_acc:0.6f}")
-                log.info(f"Valid accuracy:    {valid_acc:0.6f}")
+                if epoch > 1:
+                    log.info(f"Training accuracy: {train_acc:0.6f}")
+                    log.info(f"Valid accuracy:    {valid_acc:0.6f}")
                 log.info(f"*" * 30)
 
             # Optune callbacks
@@ -164,7 +188,7 @@ class Trainer(ABC):
         train_params = {
             "lr": self.optimizer.param_groups[0]["lr"],
             "epochs": self.epochs,
-            "batch": self.batch_size,
+            "batch": self.train_loader.batch_size,
             "opt": {"name": str(type(self.optimizer)), "parameters": self.optimizer.defaults},
         }
         return json.dumps(train_params, indent=3)
