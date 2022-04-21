@@ -11,7 +11,7 @@ setuptools.setup(
     description="Pytorch training utils",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    packages=setuptools.find_packages(where="./"),
+    packages=setuptools.find_packages(where="."),
     install_requires=["rich", "click"],
     include_package_data=True,
     python_requires=">=3.7",
