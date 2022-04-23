@@ -28,16 +28,18 @@ class TrainingBoard:
         if ax is None:
             ax = TrainingBoard.create_ax()
         train_acc = self.checkpoint.get_running_var("train_acc")
-        keys = [*train_acc]
-        values = [*train_acc.values()]
-        # ax.plot(self.train_acc_store, color="blue", label="train acc")
-        ax.plot(keys, values, color="blue", label="train acc")
+        if train_acc:
+            keys = [*train_acc]
+            values = [*train_acc.values()]
+            # ax.plot(self.train_acc_store, color="blue", label="train acc")
+            ax.plot(keys, values, color="blue", label="train acc")
 
         valid_acc = self.checkpoint.get_running_var("valid_acc")
-        keys = [*valid_acc]
-        values = [*valid_acc.values()]
-        ax.plot(keys, values, color="orange", label="valid acc")
-        # ax.plot(self.valid_acc_store, color="orange", label="valid acc")
+        if valid_acc:
+            keys = [*valid_acc]
+            values = [*valid_acc.values()]
+            ax.plot(keys, values, color="orange", label="valid acc")
+            # ax.plot(self.valid_acc_store, color="orange", label="valid acc")
 
         ax.set_title("Accuracy curves")
         ax.set_xlabel("Epochs")

@@ -32,3 +32,18 @@ class TrainMulticlassNet(Trainer):
         acc = acc_sum / total
         return acc.cpu().data.item()
 
+if __name__ == "__main__":
+    trainer = TrainMulticlassNet(
+        train_loader=None,
+        valid_loader=None,
+        net=None,
+        optimizer=None,
+        loss_metric=None,
+        epochs=0,
+        root=None,
+        gpu_boole=True,
+        optimize_hyperparams=False,
+        save=False,
+        log_interval=3,
+        end_of_epoch_metrics=["train_acc", "valid_acc"],
+    )

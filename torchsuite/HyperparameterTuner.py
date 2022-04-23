@@ -6,6 +6,8 @@ from dataclasses import dataclass
 
 # Save state
 class SaveStateCallback:
+    """Callback class that can be used to save the Optuna study's state at the end of each iteration."""
+
     def __init__(self, study_name: str, root: Path):
         self.root = root
         self.study_name = study_name

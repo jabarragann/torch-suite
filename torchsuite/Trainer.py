@@ -4,10 +4,12 @@ from pathlib import Path
 import numpy as np
 import time
 from rich.progress import track
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Callable, List
 
 # Torch
 import optuna
+from sklearn.multioutput import MultiOutputClassifier
 import torch
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
@@ -18,6 +20,23 @@ from pytorchcheckpoint.checkpoint import CheckpointHandler
 
 log = Logger(__name__).log
 np.set_printoptions(precision=4, suppress=True, sign=" ")
+
+
+@dataclass
+class EndOfEpochMetric:
+    name: str
+    checkpoint_handler: CheckpointHandler
+    function: Callable
+    loader: DataLoader
+
+    def __post_init__(self):
+        self.current_val: float = 0.0
+
+    def calc_new_value(self, epoch=None):
+        if epoch is None:
+            raise Exception("epoch cannot be None")
+        self.current_val = self.function(self.loader)
+        self.checkpoint_handler.store_running_var(var_name=self.name, iteration=epoch, value=self.current_val)
 
 
 @dataclass
@@ -33,6 +52,7 @@ class Trainer(ABC):
     optimize_hyperparams: bool = False
     save: bool = True
     log_interval: int = 1
+    end_of_epoch_metrics: List = field(default_factory=lambda: ["train_acc", "valid_acc"])
 
     def __post_init__(self):
         self.init_epoch = 0
@@ -40,6 +60,18 @@ class Trainer(ABC):
         self.batch_count = 0
         self.best_valid_acc = 0.0
         self.checkpoint_handler = CheckpointHandler()
+
+        self.epoch_metrics_dict = {}
+        for m in self.end_of_epoch_metrics:
+            assert m in ["train_acc", "valid_acc"], "only train_acc or valid_acc in end of epoch metrics"
+            data_l = m.strip().split("_")[0]
+            metric = EndOfEpochMetric(
+                name=m,
+                checkpoint_handler=self.checkpoint_handler,
+                function=self.calculate_acc,
+                loader=self.__getattribute__(data_l + "_loader"),
+            )
+            self.epoch_metrics_dict[m] = metric
 
     def train_loop(self, trial: optuna.Trial = None, verbose=True):
         log.info(f"Starting Training")
@@ -89,24 +121,22 @@ class Trainer(ABC):
             # End of epoch statistics
             train_loss = loss_sum / total
             train_loss = train_loss.cpu().item()
+            self.checkpoint_handler.store_running_var(var_name="train_loss", iteration=epoch, value=train_loss)
 
-            # Todo: Add here a better way of calculating
-            # additional metrics. Allow the user to select
-            # which metrics to calculate at the end of epoch.
-            if epoch > 1:
-                train_acc = self.calculate_acc(self.train_loader)
-                valid_acc = self.calculate_acc(self.valid_loader)
-                self.checkpoint_handler.store_running_var(var_name="train_loss", iteration=epoch, value=train_loss)
-                self.checkpoint_handler.store_running_var(var_name="train_acc", iteration=epoch, value=train_acc)
-                self.checkpoint_handler.store_running_var(var_name="valid_acc", iteration=epoch, value=valid_acc)
+            # End of epoch additional metrics
+            for m in self.end_of_epoch_metrics:
+                self.epoch_metrics_dict[m].calc_new_value(**{"epoch": epoch})
+
             self.final_epoch = epoch
             self.init_epoch = self.final_epoch
 
             # Saving models
-            if valid_acc > self.best_valid_acc and self.save:
-                log.info("saving best validation model")
-                self.best_valid_acc = valid_acc
-                self.save_checkpoint("best_checkpoint.pt")
+            if "valid_acc" in self.epoch_metrics_dict:
+                valid_acc = self.epoch_metrics_dict["valid_acc"].current_val
+                if valid_acc > self.best_valid_acc and self.save:
+                    log.info("saving best validation model")
+                    self.best_valid_acc = valid_acc
+                    self.save_checkpoint("best_checkpoint.pt")
             if self.save:
                 self.save_checkpoint("final_checkpoint.pt")
 
@@ -117,9 +147,8 @@ class Trainer(ABC):
                 log.info(f"Epoch {epoch}/{self.epochs-1}:")
                 log.info(f"Elapsed time for epoch: { time2 - time1:0.04f} s")
                 log.info(f"Training loss:     {train_loss:0.8f}")
-                if epoch > 1:
-                    log.info(f"Training accuracy: {train_acc:0.6f}")
-                    log.info(f"Valid accuracy:    {valid_acc:0.6f}")
+                for m in self.end_of_epoch_metrics:
+                    log.info(f"{m}: {self.epoch_metrics_dict[m].current_val:0.06f}")
                 log.info(f"*" * 30)
 
             # Optune callbacks
@@ -169,6 +198,11 @@ class Trainer(ABC):
         self.batch_count = self.checkpoint_handler.batch_count
         self.best_valid_acc = self.checkpoint_handler.get_var("best_valid_acc")
 
+        # Update the checkpoint handler in all the cb
+        metric_cal: EndOfEpochMetric
+        for metric_cal in self.epoch_metrics_dict.values():
+            metric_cal.checkpoint_handler = self.checkpoint_handler
+
     def save_checkpoint(self, filename):
         # Save training params json
         self.save_training_parameters(self.root)
@@ -192,7 +226,3 @@ class Trainer(ABC):
             "opt": {"name": str(type(self.optimizer)), "parameters": self.optimizer.defaults},
         }
         return json.dumps(train_params, indent=3)
-
-
-if __name__ == "__main__":
-    pass
