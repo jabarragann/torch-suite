@@ -1,8 +1,9 @@
 # Pytorch Suite
 
-* Checkpoints
-* Optuna
-* Training loops
+Features included in torchsuite
+* Checkpoints: Save models and training plots.
+* Optuna: Hyperparameter tunning.
+* Training loops: Pytorch training loops.
 
 
 ## Install
