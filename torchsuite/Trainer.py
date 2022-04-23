@@ -1,6 +1,8 @@
 from abc import ABC, abstractclassmethod
 import json
 from pathlib import Path
+from re import I
+from tabnanny import check
 import numpy as np
 import time
 from rich.progress import track
@@ -39,6 +41,36 @@ class EndOfEpochMetric:
         self.checkpoint_handler.store_running_var(var_name=self.name, iteration=epoch, value=self.current_val)
 
 
+class BestModelSaver:
+    def __init__(self, direction: str, metric_name: str) -> None:
+        assert direction in ["maximize", "minimize"], "Not valid direction"
+        assert metric_name in ["train_loss", "train_acc", "valid_acc"], "Not valid metric name"
+
+        self.direction = direction
+        self.metric_name = metric_name
+        self.best_metric = -99999.0 if direction == "maximize" else 99999.0
+
+    def __call__(self, checkpoint_handler: CheckpointHandler = None, save_function: callable = None):
+        if checkpoint_handler is None or save_function is None:
+            Exception("error. wrong input parameters")
+
+        current_metric_dict = checkpoint_handler.__getattribute__(self.metric_name)
+        last_key = list(current_metric_dict)[-1]
+        current_metric = current_metric_dict[last_key]
+        if self.direction == "maximize":
+            if current_metric > self.best_metric:
+                save_function("best_checkpoint.pt")
+                self.best_metric = current_metric
+                log.info(f"Save best model at epoch {last_key}: {current_metric:0.06f}")
+        elif self.direction == "minimize":
+            if current_metric < self.best_metric:
+                save_function("best_checkpoint.pt")
+                self.best_metric = current_metric
+                log.info(f"Save best model at epoch {last_key}: {current_metric:0.06f}")
+
+        return self.best_metric
+
+
 @dataclass
 class Trainer(ABC):
     train_loader: DataLoader
@@ -53,13 +85,16 @@ class Trainer(ABC):
     save: bool = True
     log_interval: int = 1
     end_of_epoch_metrics: List = field(default_factory=lambda: ["train_acc", "valid_acc"])
+    metric_to_opt: str = "train_loss"
+    direction_to_opt: str = "minimize"
 
     def __post_init__(self):
         self.init_epoch = 0
         self.final_epoch = 0
         self.batch_count = 0
-        self.best_valid_acc = 0.0
         self.checkpoint_handler = CheckpointHandler()
+        self.best_model_saver = BestModelSaver(self.direction_to_opt, self.metric_to_opt)
+        self.best_metric_to_opt = self.best_model_saver.best_metric
 
         self.epoch_metrics_dict = {}
         for m in self.end_of_epoch_metrics:
@@ -131,12 +166,14 @@ class Trainer(ABC):
             self.init_epoch = self.final_epoch
 
             # Saving models
-            if "valid_acc" in self.epoch_metrics_dict:
-                valid_acc = self.epoch_metrics_dict["valid_acc"].current_val
-                if valid_acc > self.best_valid_acc and self.save:
-                    log.info("saving best validation model")
-                    self.best_valid_acc = valid_acc
-                    self.save_checkpoint("best_checkpoint.pt")
+            if self.save:
+                self.best_metric_to_opt = self.best_model_saver(self.checkpoint_handler, self.save_checkpoint)
+            # if "valid_acc" in self.epoch_metrics_dict:
+            #     valid_acc = self.epoch_metrics_dict["valid_acc"].current_val
+            #     if valid_acc > self.best_valid_acc and self.save:
+            #         log.info("saving best validation model")
+            #         self.best_valid_acc = valid_acc
+            #         self.save_checkpoint("best_checkpoint.pt")
             if self.save:
                 self.save_checkpoint("final_checkpoint.pt")
 
@@ -196,7 +233,10 @@ class Trainer(ABC):
         )
         self.init_epoch = self.checkpoint_handler.iteration + 1
         self.batch_count = self.checkpoint_handler.batch_count
-        self.best_valid_acc = self.checkpoint_handler.get_var("best_valid_acc")
+
+        if self.checkpoint_handler.get_var("best_metric_to_opt"):
+            self.best_metric_to_opt = self.checkpoint_handler.get_var("best_metric_to_opt")
+            self.best_model_saver.best_metric = self.best_metric_to_opt
 
         # Update the checkpoint handler in all the cb
         metric_cal: EndOfEpochMetric
@@ -208,7 +248,7 @@ class Trainer(ABC):
         self.save_training_parameters(self.root)
 
         # Save Checkpoint
-        self.checkpoint_handler.store_var(var_name="best_valid_acc", value=self.best_valid_acc)
+        self.checkpoint_handler.store_var(var_name="best_metric_to_opt", value=self.best_metric_to_opt)
         self.checkpoint_handler.store_var(var_name="last_epoch", value=self.final_epoch)
         self.checkpoint_handler.save_checkpoint(
             checkpoint_path=self.root / filename,
