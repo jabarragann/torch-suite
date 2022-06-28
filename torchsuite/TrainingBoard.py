@@ -86,6 +86,8 @@ class TrainingBoard:
         if plot:
             plt.show()
 
+        return fig
+
     @staticmethod
     def create_ax():
         fig, ax = plt.subplots(1, 1)
