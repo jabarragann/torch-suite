@@ -7,7 +7,18 @@ Features included in torchsuite
 
 
 ## Install
+Clone the repo with the recursive flag included.
 
+```
+git clone https://github.com/jabarragann/torch-suite.git --recursive
+```
+
+[OPTIONAL] If repository was clone without recursive flag execute the following command to get submodules.
+```
+git submodule update --init --recursive
+```
+
+Install the following two python modules.
 ```
 pip install -e .
 pip install -e ./pytorch-checkpoint/
