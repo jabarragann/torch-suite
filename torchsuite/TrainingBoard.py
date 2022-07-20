@@ -79,7 +79,7 @@ class TrainingBoard:
         return ax
 
     def training_plots(self, plot=True):
-        fig, axes = plt.subplots(1, 3)
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
         self.create_loss_batch_plot(ax=axes[0])
         self.create_loss_epoch_plot(ax=axes[1])
         self.create_acc_plot(ax=axes[2])
