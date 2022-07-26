@@ -13,6 +13,7 @@ from sklearn.multioutput import MultiOutputClassifier
 import torch
 from torch.utils.data import DataLoader, Dataset
 import torch.nn as nn
+from torch.optim.lr_scheduler import ReduceLROnPlateau
 
 # Custom
 from torchsuite.utils.Logger import Logger
@@ -41,7 +42,7 @@ class EndOfEpochMetric:
     def __post_init__(self):
         self.current_val: float = 0.0
 
-    def calc_new_value(self, epoch:int=None):
+    def calc_new_value(self, epoch: int = None):
         """ Calculate a new metric and stored it in the checkpointHandler
 
         Parameters
@@ -65,6 +66,7 @@ class EndOfEpochMetric:
 class BestModelSaver:
     """ Class to save best models
     """
+
     def __init__(self, direction: str, metric_name: str, verbose) -> None:
         assert direction in ["maximize", "minimize"], "Not valid direction"
         assert metric_name in ["train_loss", "train_acc", "valid_acc"], "Not valid metric name"
@@ -72,7 +74,7 @@ class BestModelSaver:
         self.direction = direction
         self.metric_name = metric_name
         self.best_metric = -99999.0 if direction == "maximize" else 99999.0
-        self.verbose =verbose
+        self.verbose = verbose
 
     def __call__(
         self, checkpoint_handler: CheckpointHandler = None, save_function: callable = None
@@ -135,14 +137,16 @@ class Trainer(ABC):
     end_of_epoch_metrics: List = field(default_factory=lambda: ["train_acc", "valid_acc"])
     metric_to_opt: str = "train_loss"
     direction_to_opt: str = "minimize"
-    verbose=True,
+    verbose = True
 
     def __post_init__(self):
         self.init_epoch = 0
         self.final_epoch = 0
         self.batch_count = 0
         self.checkpoint_handler = CheckpointHandler()
-        self.best_model_saver = BestModelSaver(self.direction_to_opt, self.metric_to_opt, self.verbose)
+        self.best_model_saver = BestModelSaver(
+            self.direction_to_opt, self.metric_to_opt, self.verbose
+        )
         self.best_metric_to_opt = self.best_model_saver.best_metric
 
         # Store all the EndOfEpochMetric objects in a dictionary. Each object requires a function and a dataloader
@@ -162,8 +166,8 @@ class Trainer(ABC):
             self.end_of_epoch_metrics_dict[m] = metric
 
     def train_loop(self, trial: optuna.Trial = None, verbose=True):
-        self.verbose=verbose
-        self.best_model_saver.verbose=verbose
+        self.verbose = verbose
+        self.best_model_saver.verbose = verbose
 
         log.info(f"Starting Training")
         valid_acc = 0
