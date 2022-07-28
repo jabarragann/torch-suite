@@ -153,14 +153,18 @@ class Trainer(ABC):
         self.end_of_epoch_metrics_dict = {}
         for m in self.end_of_epoch_metrics:
             assert m in [
+                "valid_loss",
                 "train_acc",
                 "valid_acc",
             ], "only train_acc or valid_acc in end of epoch metrics"
-            data_l = m.strip().split("_")[0]
+            data_l = m.strip().split("_")[0]  # Either train or valid
+            func_n = m.strip().split("_")[1]  # Either loss or acc
             metric = EndOfEpochMetric(
                 name=m,
                 checkpoint_handler=self.checkpoint_handler,
-                function=self.calculate_acc,
+                # e.g equivalent to function=self.calculate_loss
+                function=self.__getattribute__("calculate_" + func_n),
+                # e.g. equivalent to loader=self.valid_loader
                 loader=self.__getattribute__(data_l + "_loader"),
             )
             self.end_of_epoch_metrics_dict[m] = metric
@@ -243,6 +247,7 @@ class Trainer(ABC):
                 log.info(f"Epoch {epoch}/{self.epochs-1}:")
                 log.info(f"Elapsed time for epoch: { time2 - time1:0.04f} s")
                 log.info(f"Training loss:     {train_loss:0.8f}")
+                log.info(f"END OF EPOCH METRICS")
                 for m in self.end_of_epoch_metrics:
                     log.info(f"{m}: {self.end_of_epoch_metrics_dict[m].current_val:0.06f}")
                 log.info(f"*" * 30)

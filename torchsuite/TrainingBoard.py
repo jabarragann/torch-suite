@@ -66,11 +66,20 @@ class TrainingBoard:
     def create_loss_epoch_plot(self, ax=None):
         if ax is None:
             ax = TrainingBoard.create_ax()
-        ax.set_title("Epoch Training loss")
+        ax.set_title("Loss curves")
+
         train_loss = self.checkpoint.get_running_var("train_loss")
         keys = [*train_loss]
         values = [*train_loss.values()]
         ax.plot(keys, values, label="train_loss", color="blue")
+
+        # Try to get valid loss
+        valid_loss = self.checkpoint.get_running_var("valid_loss")
+        if valid_loss:
+            keys = [*valid_loss]
+            values = [*valid_loss.values()]
+            ax.plot(keys, values, label="valid_loss", color="orange")
+
         ax.set_xlabel("epoch")
         ax.set_ylabel("Sample-wise Loss")
         ax.legend()
@@ -79,7 +88,13 @@ class TrainingBoard:
         return ax
 
     def training_plots(self, plot=True):
-        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        # fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        fig = plt.figure(figsize=(15, 5))
+        ax1 = fig.add_subplot(1, 3, 1)
+        ax2 = fig.add_subplot(1, 3, 2)
+        ax3 = fig.add_subplot(1, 3, 3, sharex=ax2)
+        axes = [ax1, ax2, ax3]
+
         self.create_loss_batch_plot(ax=axes[0])
         self.create_loss_epoch_plot(ax=axes[1])
         self.create_acc_plot(ax=axes[2])
