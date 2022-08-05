@@ -69,7 +69,12 @@ class BestModelSaver:
 
     def __init__(self, direction: str, metric_name: str, verbose) -> None:
         assert direction in ["maximize", "minimize"], "Not valid direction"
-        assert metric_name in ["train_loss", "train_acc", "valid_acc"], "Not valid metric name"
+        assert metric_name in [
+            "train_loss",
+            "train_acc",
+            "valid_loss",
+            "valid_acc",
+        ], "Not valid metric name"
 
         self.direction = direction
         self.metric_name = metric_name
@@ -143,6 +148,7 @@ class Trainer(ABC):
         self.init_epoch = 0
         self.final_epoch = 0
         self.batch_count = 0
+        self.scheduler = None
         self.checkpoint_handler = CheckpointHandler()
         self.best_model_saver = BestModelSaver(
             self.direction_to_opt, self.metric_to_opt, self.verbose
@@ -296,7 +302,10 @@ class Trainer(ABC):
             self.checkpoint_handler,
             self.net,
             self.optimizer,
-        ) = CheckpointHandler.load_checkpoint_with_model(root, self.net, self.optimizer)
+            self.scheduler,
+        ) = CheckpointHandler.load_checkpoint_with_model(
+            root, self.net, self.optimizer, self.scheduler
+        )
         self.init_epoch = self.checkpoint_handler.iteration + 1
         self.batch_count = self.checkpoint_handler.batch_count
 
@@ -324,6 +333,7 @@ class Trainer(ABC):
             batch_count=self.batch_count,
             model=self.net,
             optimizer=self.optimizer,
+            scheduler=self.scheduler,
         )
 
     def __str__(self):
